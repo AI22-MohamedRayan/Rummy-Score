@@ -9,9 +9,20 @@ const app  = express();
 const PORT = process.env.PORT || 3000;
 
 /* ── Middleware ── */
+const allowedOrigins = [
+  'https://ai22-mohamedrayan.github.io',
+  'https://ai22-mohamedrayan.github.io/Rummy-Score'
+];
+
 app.use(cors({
-  origin: process.env.ALLOWED_ORIGIN || '*',   // set to your GitHub Pages URL in production
-  methods: ['GET', 'POST', 'PATCH', 'DELETE'],
+  origin: function(origin, callback) {
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
+  methods: ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type']
 }));
 app.use(express.json());
