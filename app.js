@@ -8,7 +8,7 @@ const App = (() => {
   /* ────────────────────────────────────────────────────────
      CONFIG — swap this to your Render backend URL
   ──────────────────────────────────────────────────────── */
-  const API_BASE = 'https://card-game-score-api.onrender.com/api';
+  const API_BASE = 'https://rummy-score.onrender.com/api';
 
   /* ── STATE ── */
   let state = null;
