@@ -163,7 +163,9 @@ const App = (() => {
     playerCount = Math.max(2, Math.min(10, playerCount + delta));
     document.getElementById('player-count-display').textContent = playerCount;
     renderNameInputs();
-    if (state?.mode === 'best7') renderTeamOptions();
+    if (state?.mode === 'best7' && document.getElementById('team-mode-toggle')?.checked) {
+      renderTeamSizeSelector();
+    }
   }
 
   function renderNameInputs() {
@@ -185,28 +187,63 @@ const App = (() => {
   function toggleTeamMode() {
     const on = document.getElementById('team-mode-toggle').checked;
     document.getElementById('team-assignment').style.display = on ? 'block' : 'none';
-    if (on) renderTeamOptions();
+    if (on) renderTeamSizeSelector();
   }
 
-  function renderTeamOptions() {
-    const names = getPlayerNames();
+  // Step 1: pick how many players per team
+  function renderTeamSizeSelector() {
     const container = document.getElementById('team-assignment');
-    if (names.length < 4 || names.length % 2 !== 0) {
-      container.innerHTML = '<p style="color:var(--text3);font-size:0.85rem;">Need an even number of players (4+) for teams.</p>';
+    const names = getPlayerNames();
+    const n = names.length;
+
+    // Find all valid team sizes that divide evenly into player count
+    const validSizes = [];
+    for (let s = 2; s <= Math.floor(n / 2); s++) {
+      if (n % s === 0) validSizes.push(s);
+    }
+
+    if (validSizes.length === 0) {
+      container.innerHTML = '<p style="color:var(--text3);font-size:0.85rem;">Need at least 4 players for team mode.</p>';
       return;
     }
-    const teamCount = names.length / 2;
+
+    const opts = validSizes.map(s =>
+      `<option value="${s}">${s} players/team (${n / s} teams)</option>`
+    ).join('');
+
+    container.innerHTML = `
+      <div style="margin-bottom:0.75rem;">
+        <label class="field-label" style="margin-bottom:0.4rem;">Players per team</label>
+        <select id="team-size-select" class="team-select" style="width:220px"
+                onchange="App.renderTeamSlots()">
+          ${opts}
+        </select>
+      </div>
+      <div id="team-slots"></div>
+    `;
+    renderTeamSlots();
+  }
+
+  // Step 2: render assign-player dropdowns for each team
+  function renderTeamSlots() {
+    const names   = getPlayerNames();
+    const sizeEl  = document.getElementById('team-size-select');
+    if (!sizeEl) return;
+    const perTeam  = parseInt(sizeEl.value);
+    const teamCount = names.length / perTeam;
+    const container = document.getElementById('team-slots');
+
     let html = '<div class="team-grid">';
     for (let t = 0; t < teamCount; t++) {
-      html += `<div class="team-slot">
-        <div class="team-slot-label">Team ${t + 1}</div>
-        <select class="team-select" data-team="${t}" data-pos="0">
-          ${names.map((n, i) => `<option value="${i}">${n || 'Player ' + (i + 1)}</option>`).join('')}
-        </select>
-        <select class="team-select" style="margin-top:0.4rem;" data-team="${t}" data-pos="1">
-          ${names.map((n, i) => `<option value="${i}">${n || 'Player ' + (i + 1)}</option>`).join('')}
-        </select>
-      </div>`;
+      html += `<div class="team-slot"><div class="team-slot-label">Team ${t + 1}</div>`;
+      for (let p = 0; p < perTeam; p++) {
+        html += `
+          <select class="team-select" data-team="${t}" data-pos="${p}"
+                  style="margin-top:${p > 0 ? '0.4rem' : '0'}">
+            ${names.map((n, i) => `<option value="${i}">${n}</option>`).join('')}
+          </select>`;
+      }
+      html += '</div>';
     }
     html += '</div>';
     container.innerHTML = html;
@@ -236,20 +273,32 @@ const App = (() => {
     if (state.mode === 'best7') {
       const teamOn = document.getElementById('team-mode-toggle')?.checked;
       if (teamOn) {
-        const selects = document.querySelectorAll('.team-select');
-        if (selects.length > 0) {
-          const teamCount = names.length / 2;
-          teams = [];
-          const used = new Set();
-          for (let t = 0; t < teamCount; t++) {
-            const p1 = parseInt([...selects].find(s => s.dataset.team == t && s.dataset.pos == 0)?.value ?? 0);
-            const p2 = parseInt([...selects].find(s => s.dataset.team == t && s.dataset.pos == 1)?.value ?? 1);
-            if (p1 === p2)         { alert(`Team ${t + 1}: select two different players.`); return; }
-            if (used.has(p1) || used.has(p2)) { alert(`A player is assigned to multiple teams.`); return; }
-            used.add(p1); used.add(p2);
-            teams.push({ name: `Team ${t + 1}`, players: [p1, p2] });
+        const sizeEl = document.getElementById('team-size-select');
+        if (!sizeEl) { alert('Configure teams before starting.'); return; }
+        const perTeam  = parseInt(sizeEl.value);
+        const teamCount = names.length / perTeam;
+        const selects  = document.querySelectorAll('#team-slots .team-select');
+        teams = [];
+        const used = new Set();
+        let valid = true;
+        for (let t = 0; t < teamCount; t++) {
+          const members = [];
+          for (let p = 0; p < perTeam; p++) {
+            const sel = [...selects].find(s => s.dataset.team == t && s.dataset.pos == p);
+            const pid = parseInt(sel?.value ?? 0);
+            if (members.includes(pid)) {
+              alert(`Team ${t + 1}: each member must be a different player.`); valid = false; break;
+            }
+            if (used.has(pid)) {
+              alert(`Player "${names[pid]}" is assigned to multiple teams.`); valid = false; break;
+            }
+            members.push(pid);
+            used.add(pid);
           }
+          if (!valid) break;
+          teams.push({ name: `Team ${t + 1}`, players: members });
         }
+        if (!valid) return;
       }
     }
 
@@ -887,7 +936,7 @@ const App = (() => {
 
   return {
     goTo, goToHome,
-    selectMode, changePlayerCount, toggleTeamMode,
+    selectMode, changePlayerCount, toggleTeamMode, renderTeamSlots,
     startGame, submitRound, endGame, confirmExit,
     showResults, saveAsPDF, saveAsScreenshot,
     openViewScreen, loadViewByCode,
